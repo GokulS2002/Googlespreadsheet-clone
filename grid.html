@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Sheets-like Interface</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(10, 30px);
+            border: 1px solid black;
+        }
+        .cell {
+            border: 1px solid black;
+            width: 100%;
+            height: 30px;
+            text-align: center;
+            vertical-align: middle;
+            padding: 5px;
+            cursor: pointer;
+            box-sizing: border-box;
+        }
+        .selected {
+            border: 2px solid skyblue;
+        }
+        #toolbar {
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 8px;
+            margin-right: 10px;
+            font-size: 16px;
+        }
+        #icon-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar1" style="display:flex;gap:20px;" >
+        <p> File</p>
+        <p> Edit</p>
+        <p>Comment</p>
+        <p> Share</p>
+    </div>
+    
+<div id="toolbar" style="display:flex;gap:80px;background-color:grey;">
+    <p onclick="addRow()"><i class="fas fa-plus-circle"></i> </p>
+    <p onclick="addColumn()"><i class="fas fa-plus-square"></i></p>
+    <p onclick="deleteRow()"><i class="fas fa-trash-alt"></i> </p>
+    <p onclick="deleteColumn()"><i class="fas fa-trash"></i> </p>
+    <p onclick="boldText()"><i class="fas fa-bold"></i></p>
+    <p onclick="italicText()"><i class="fas fa-italic"></i></p>
+    <p onclick="applyTrim()"><i class="fas fa-cut"></i> </p>
+    <p onclick="convertToUpper()"><i class="fas fa-arrow-up"></i> </p>
+    <p onclick="convertToLower()"><i class="fas fa-arrow-down"></i> </p>
+    <p onclick="removeDuplicates()"><i class="fas fa-eraser"></i> </p>
+    <p onclick="findAndReplace()"><i class="fas fa-search"></i> </p>
+    <p onclick="calculateSum()"><i class="fas fa-sum"></i> </p>
+    <p onclick="calculateAverage()"><i class="fas fa-calculator"></i></p>
+</div>
+
+<input type="text" id="formulaBar" placeholder="Enter formula..." style="width: 100%; margin-bottom: 10px;" />
+
+<div id="grid">
+    {% for row in grid %}
+        {% for cell in row %}
+            <div class="cell" id="cell_{{ forloop.parentloop.counter0 }}_{{ forloop.counter0 }}" draggable="true" ondragstart="dragStart(event)" onclick="selectCell(this)">
+                {{ cell }}
+            </div>
+        {% endfor %}
+    {% endfor %}
+</div>
+
+<script>
+    let selectedCell = null;
+
+    // Drag and Drop functionality for cells
+    function dragStart(e) {
+        selectedCell = e.target;
+        e.dataTransfer.setData("text", selectedCell.innerText);
+    }
+
+    function drop(e) {
+        e.preventDefault();
+        const targetCell = e.target;
+        if (selectedCell && targetCell !== selectedCell) {
+            targetCell.innerText = selectedCell.innerText;
+            selectedCell.innerText = e.dataTransfer.getData("text");
+            updateCell(selectedCell.id, selectedCell.innerText);
+            updateCell(targetCell.id, targetCell.innerText);
+        }
+    }
+
+    function allowDrop(e) {
+        e.preventDefault();
+    }
+
+    function selectCell(cell) {
+        if (selectedCell) {
+            selectedCell.classList.remove('selected');
+        }
+        selectedCell = cell;
+        selectedCell.classList.add('selected');
+        document.getElementById('formulaBar').value = selectedCell.innerText;
+    }
+
+    // Update cell value
+    document.getElementById('formulaBar').addEventListener('input', function () {
+        if (selectedCell) {
+            selectedCell.innerText = this.value;
+            updateCell(selectedCell.id, this.value);
+        }
+    });
+
+    function updateCell(id, value) {
+        const [row, col] = id.split('_').slice(1).map(Number);
+        fetch('/update-cell/', {
+            method: 'POST',
+            body: new URLSearchParams({
+                'row': row,
+                'col': col,
+                'value': value
+            }),
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        }).then(response => response.json())
+          .then(data => console.log(data));
+    }
+
+    // Add Row
+    function addRow() {
+        fetch('/add-row/', {
+            method: 'POST'
+        }).then(response => response.json())
+          .then(data => {
+              const grid = data.grid;
+              renderGrid(grid);
+          });
+    }
+
+    // Add Column
+    function addColumn() {
+        fetch('/add-column/', {
+            method: 'POST'
+        }).then(response => response.json())
+          .then(data => {
+              const grid = data.grid;
+              renderGrid(grid);
+          });
+    }
+
+    // Delete Row
+    function deleteRow() {
+        const row = prompt("Enter row index to delete:");
+        fetch('/delete-row/', {
+            method: 'POST',
+            body: new URLSearchParams({
+                'row': row
+            }),
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        }).then(response => response.json())
+          .then(data => {
+              const grid = data.grid;
+              renderGrid(grid);
+          });
+    }
+
+    // Delete Column
+    function deleteColumn() {
+        const col = prompt("Enter column index to delete:");
+        fetch('/delete-column/', {
+            method: 'POST',
+            body: new URLSearchParams({
+                'col': col
+            }),
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        }).then(response => response.json())
+          .then(data => {
+              const grid = data.grid;
+              renderGrid(grid);
+          });
+    }
+
+    function renderGrid(grid) {
+        const gridContainer = document.getElementById('grid');
+        gridContainer.innerHTML = '';
+        grid.forEach((row, rowIndex) => {
+            row.forEach((cell, colIndex) => {
+                const cellDiv = document.createElement('div');
+                cellDiv.classList.add('cell');
+                cellDiv.id = `cell_${rowIndex}_${colIndex}`;
+                cellDiv.innerText = cell;
+                cellDiv.addEventListener('click', () => selectCell(cellDiv));
+                gridContainer.appendChild(cellDiv);
+            });
+        });
+    }
+
+    // Apply Bold formatting
+    function boldText() {
+        if (selectedCell) {
+            selectedCell.style.fontWeight = selectedCell.style.fontWeight === 'bold' ? 'normal' : 'bold';
+        }
+    }
+
+    // Apply Italic formatting
+    function italicText() {
+        if (selectedCell) {
+            selectedCell.style.fontStyle = selectedCell.style.fontStyle === 'italic' ? 'normal' : 'italic';
+        }
+    }
+
+    // Trim spaces from selected cell
+    function applyTrim() {
+        if (selectedCell) {
+            selectedCell.innerText = selectedCell.innerText.trim();
+            updateCell(selectedCell.id, selectedCell.innerText);
+        }
+    }
+
+    // Convert text to uppercase
+    function convertToUpper() {
+        if (selectedCell) {
+            selectedCell.innerText = selectedCell.innerText.toUpperCase();
+            updateCell(selectedCell.id, selectedCell.innerText);
+        }
+    }
+
+    // Convert text to lowercase
+    function convertToLower() {
+        if (selectedCell) {
+            selectedCell.innerText = selectedCell.innerText.toLowerCase();
+            updateCell(selectedCell.id, selectedCell.innerText);
+        }
+    }
+
+    // Remove duplicates from the grid
+    function removeDuplicates() {
+        const gridCells = document.querySelectorAll('.cell');
+        const uniqueValues = new Set();
+        gridCells.forEach(cell => {
+            if (uniqueValues.has(cell.innerText)) {
+                cell.innerText = '';
+                updateCell(cell.id, '');
+            } else {
+                uniqueValues.add(cell.innerText);
+            }
+        });
+    }
+
+    // Find and replace text
+    function findAndReplace() {
+        const findText = prompt("Enter text to find:");
+        const replaceText = prompt("Enter text to replace:");
+        const gridCells = document.querySelectorAll('.cell');
+        gridCells.forEach(cell => {
+            if (cell.innerText.includes(findText)) {
+                cell.innerText = cell.innerText.replace(findText, replaceText);
+                updateCell(cell.id, cell.innerText);
+            }
+        });
+    }
+
+    // SUM function
+    function calculateSum() {
+        let sum = 0;
+        const selectedCells = document.querySelectorAll('.selected');
+        selectedCells.forEach(cell => {
+            const cellValue = parseFloat(cell.innerText);
+            if (!isNaN(cellValue)) {
+                sum += cellValue;
+            }
+        });
+        alert("SUM: " + sum);
+    }
+
+    // AVERAGE function
+    function calculateAverage() {
+        let sum = 0, count = 0;
+        const selectedCells = document.querySelectorAll('.selected');
+        selectedCells.forEach(cell => {
+            const cellValue = parseFloat(cell.innerText);
+            if (!isNaN(cellValue)) {
+                sum += cellValue;
+                count++;
+            }
+        });
+        const average = count > 0 ? sum / count : 0;
+        alert("AVERAGE: " + average);
+    }
+</script>
+
+</body>
+</html>
